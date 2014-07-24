@@ -1103,7 +1103,7 @@
     <type name="byte"    size="1"                  glx_name="CARD8"/>
     <type name="ubyte"   size="1"  unsigned="true" glx_name="CARD8"/>
     <type name="boolean" size="1"  unsigned="true" glx_name="CARD8"/>
-    
+
     <type name="void"    size="1"/>
 
     <type name="DEBUGPROCARB" size="4" pointer="true"/>
@@ -12328,7 +12328,7 @@
       <param name="range" type="GLuint"/>
       <glx ignore="true"/>
     </function>
-    
+
     <function name="BindFragmentShaderATI" offset="assign" deprecated="3.1">
       <param name="id" type="GLuint"/>
       <glx ignore="true"/>
@@ -12346,7 +12346,7 @@
     <function name="EndFragmentShaderATI" offset="assign" deprecated="3.1">
       <glx ignore="true"/>
     </function>
-    
+
     <function name="PassTexCoordATI" offset="assign" deprecated="3.1">
       <param name="dst" type="GLuint"/>
       <param name="coord" type="GLuint"/>
@@ -12812,8 +12812,6 @@
     <enum name="FRAMEBUFFER_SRGB_CAPABLE_EXT"      value="0x8DBA"/>
 </category>
 
-<xi:include href="AMD_performance_monitor.xml" xmlns:xi="http://www.w3.org/2001/XInclude"/>
-
 <category name="GL_APPLE_texture_range" number="367">
     <enum name="TEXTURE_STORAGE_HINT_APPLE" count="1" value="0x85BC">
         <size name="TexParameteriv"/>
@@ -12864,8 +12862,6 @@
 <category name="GL_AMD_pinned_memory" number="411">
     <enum name="EXTERNAL_VIRTUAL_MEMORY_BUFFER_AMD"   value="0x9160"/>
 </category>
-
-<xi:include href="INTEL_performance_query.xml" xmlns:xi="http://www.w3.org/2001/XInclude"/>
 
 <category name="GL_EXT_polygon_offset_clamp" number="460">
     <enum name="POLYGON_OFFSET_CLAMP_EXT"             value="0x8E1B">

@@ -157,8 +157,7 @@ do_batch_dump(struct brw_context *brw)
 void
 intel_batchbuffer_emit_render_ring_prelude(struct brw_context *brw)
 {
-   /* We may need to enable and snapshot OA counters. */
-   brw_perf_monitor_new_batch(brw);
+   /* Un-used currently */
 }
 
 /**
@@ -192,9 +191,6 @@ brw_new_batch(struct brw_context *brw)
     */
    if (INTEL_DEBUG & DEBUG_SHADER_TIME)
       brw_collect_and_report_shader_time(brw);
-
-   if (INTEL_DEBUG & DEBUG_PERFMON)
-      brw_dump_perf_monitors(brw);
 }
 
 /**
@@ -213,10 +209,6 @@ brw_finish_batch(struct brw_context *brw)
     * support query objects (in the non-hardware context world).
     */
    brw_emit_query_end(brw);
-
-   /* We may also need to snapshot and disable OA counters. */
-   if (brw->batch.ring == RENDER_RING)
-      brw_perf_monitor_finish_batch(brw);
 
    /* Mark that the current program cache BO has been used by the GPU.
     * It will be reallocated if we need to put new programs in for the

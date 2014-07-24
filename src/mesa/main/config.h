@@ -281,14 +281,6 @@
 #define MAX_VERTEX_STREAMS                  4
 /*@}*/
 
-/** For GL_INTEL_performance_query */
-/*@{*/
-#define MAX_PERFQUERY_QUERY_NAME_LENGTH     256
-#define MAX_PERFQUERY_COUNTER_NAME_LENGTH   256
-#define MAX_PERFQUERY_COUNTER_DESC_LENGTH   1024
-#define PERFQUERY_HAVE_GPA_EXTENDED_COUNTERS 0
-/*@}*/
-
 /** For GL_ARB_compute_shader */
 /*@{*/
 #define MAX_COMPUTE_UNIFORM_BLOCKS          12

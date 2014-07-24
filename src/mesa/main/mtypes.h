@@ -1951,99 +1951,6 @@ struct gl_transform_feedback_state
 
 
 /**
- * A "performance monitor" as described in AMD_performance_monitor.
- */
-struct gl_perf_monitor_object
-{
-   GLuint Name;
-
-   /** True if the monitor is currently active (Begin called but not End). */
-   GLboolean Active;
-
-   /**
-    * True if the monitor has ended.
-    *
-    * This is distinct from !Active because it may never have began.
-    */
-   GLboolean Ended;
-
-   /**
-    * A list of groups with currently active counters.
-    *
-    * ActiveGroups[g] == n if there are n counters active from group 'g'.
-    */
-   unsigned *ActiveGroups;
-
-   /**
-    * An array of bitsets, subscripted by group ID, then indexed by counter ID.
-    *
-    * Checking whether counter 'c' in group 'g' is active can be done via:
-    *
-    *    BITSET_TEST(ActiveCounters[g], c)
-    */
-   GLuint **ActiveCounters;
-};
-
-
-union gl_perf_monitor_counter_value
-{
-   float f;
-   uint64_t u64;
-   uint32_t u32;
-};
-
-
-struct gl_perf_monitor_counter
-{
-   /** Human readable name for the counter. */
-   const char *Name;
-
-   /**
-    * Data type of the counter.  Valid values are FLOAT, UNSIGNED_INT,
-    * UNSIGNED_INT64_AMD, and PERCENTAGE_AMD.
-    */
-   GLenum Type;
-
-   /** Minimum counter value. */
-   union gl_perf_monitor_counter_value Minimum;
-
-   /** Maximum counter value. */
-   union gl_perf_monitor_counter_value Maximum;
-};
-
-
-struct gl_perf_monitor_group
-{
-   /** Human readable name for the group. */
-   const char *Name;
-
-   /**
-    * Maximum number of counters in this group which can be active at the
-    * same time.
-    */
-   GLuint MaxActiveCounters;
-
-   /** Array of counters within this group. */
-   const struct gl_perf_monitor_counter *Counters;
-   GLuint NumCounters;
-};
-
-
-/**
- * Context state for AMD_performance_monitor.
- */
-struct gl_perf_monitor_state
-{
-   /** Array of performance monitor groups (indexed by group ID) */
-   const struct gl_perf_monitor_group *Groups;
-   GLuint NumGroups;
-
-   /** The table of all performance monitors. */
-   struct _mesa_HashTable *Monitors;
-};
-
-
-/**
  * Names of the various vertex/fragment program register files, etc.
  *
  * NOTE: first four tokens must fit into 2 bits (see t_vb_arbprogram.c)
@@ -3856,7 +3763,6 @@ struct gl_extensions
    GLboolean EXT_vertex_array_bgra;
    GLboolean OES_standard_derivatives;
    /* vendor extensions */
-   GLboolean AMD_performance_monitor;
    GLboolean AMD_pinned_memory;
    GLboolean AMD_seamless_cubemap_per_texture;
    GLboolean AMD_vertex_shader_layer;
@@ -3867,7 +3773,6 @@ struct gl_extensions
    GLboolean ATI_texture_env_combine3;
    GLboolean ATI_fragment_shader;
    GLboolean ATI_separate_stencil;
-   GLboolean INTEL_performance_query;
    GLboolean MESA_pack_invert;
    GLboolean MESA_ycbcr_texture;
    GLboolean NV_conditional_render;
@@ -4369,8 +4274,6 @@ struct gl_context
    struct gl_query_state Query;  /**< occlusion, timer queries */
 
    struct gl_transform_feedback_state TransformFeedback;
-
-   struct gl_perf_monitor_state PerfMonitor;
 
    struct gl_buffer_object *DrawIndirectBuffer; /** < GL_ARB_draw_indirect */
 

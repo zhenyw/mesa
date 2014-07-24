@@ -166,7 +166,6 @@ API_XML = \
 	ARB_vertex_attrib_binding.xml \
 	ARB_viewport_array.xml \
 	AMD_draw_buffers_blend.xml \
-	AMD_performance_monitor.xml \
 	ARB_vertex_type_2_10_10_10_rev.xml \
 	APPLE_object_purgeable.xml \
 	APPLE_vertex_array_object.xml \
@@ -179,7 +178,6 @@ API_XML = \
 	EXT_texture_array.xml \
 	EXT_texture_integer.xml \
 	EXT_transform_feedback.xml \
-	INTEL_performance_query.xml \
 	KHR_debug.xml \
 	KHR_context_flush_control.xml \
 	NV_conditional_render.xml \

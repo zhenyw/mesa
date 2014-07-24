@@ -945,7 +945,6 @@ struct brw_stage_state
    uint32_t sampler_offset;
 };
 
-
 /**
  * brw_context is derived from gl_context.
  */
@@ -1349,43 +1348,6 @@ struct brw_context
       bool begin_emitted;
    } query;
 
-   struct {
-      /** A map from pipeline statistics counter IDs to MMIO addresses. */
-      const int *statistics_registers;
-
-      /** The number of active monitors using OA counters. */
-      unsigned oa_users;
-
-      /**
-       * A buffer object storing OA counter snapshots taken at the start and
-       * end of each batch (creating "bookends" around the batch).
-       */
-      drm_intel_bo *bookend_bo;
-
-      /** The number of snapshots written to bookend_bo. */
-      int bookend_snapshots;
-
-      /**
-       * An array of monitors whose results haven't yet been assembled based on
-       * the data in buffer objects.
-       *
-       * These may be active, or have already ended.  However, the results
-       * have not been requested.
-       */
-      struct brw_perf_monitor_object **unresolved;
-      int unresolved_elements;
-      int unresolved_array_size;
-
-      /**
-       * Mapping from a uint32_t offset within an OA snapshot to the ID of
-       * the counter which MI_REPORT_PERF_COUNT stores there.
-       */
-      const int *oa_snapshot_layout;
-
-      /** Number of 32-bit entries in a hardware counter snapshot. */
-      int entries_per_oa_snapshot;
-   } perfmon;
-
    int num_atoms;
    const struct brw_tracked_state atoms[57];
 
@@ -1661,12 +1623,6 @@ bool brw_is_hiz_depth_format(struct brw_context *ctx, mesa_format format);
 bool brw_render_target_supported(struct brw_context *brw,
                                  struct gl_renderbuffer *rb);
 uint32_t brw_depth_format(struct brw_context *brw, mesa_format format);
-
-/* brw_performance_monitor.c */
-void brw_init_performance_monitors(struct brw_context *brw);
-void brw_dump_perf_monitors(struct brw_context *brw);
-void brw_perf_monitor_new_batch(struct brw_context *brw);
-void brw_perf_monitor_finish_batch(struct brw_context *brw);
 
 /* intel_buffer_objects.c */
 int brw_bo_map(struct brw_context *brw, drm_intel_bo *bo, int write_enable,
