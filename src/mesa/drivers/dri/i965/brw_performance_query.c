@@ -1299,7 +1299,7 @@ brw_delete_perf_query(struct gl_context *ctx,
 
 /******************************************************************************/
 
-/* Type safe wrapper for reading OA counter values */
+/* Type safe wrappers for reading OA counter values */
 
 static uint64_t
 read_uint64_oa_counter(struct brw_oa_counter *counter, uint64_t *accumulated)
@@ -1307,6 +1307,18 @@ read_uint64_oa_counter(struct brw_oa_counter *counter, uint64_t *accumulated)
    uint64_t value;
 
    assert(counter->data_type == GL_PERFQUERY_COUNTER_DATA_UINT64_INTEL);
+
+   counter->read(counter, accumulated, &value);
+
+   return value;
+}
+
+static float
+read_float_oa_counter(struct brw_oa_counter *counter, uint64_t *accumulated)
+{
+   float value;
+
+   assert(counter->data_type == GL_PERFQUERY_COUNTER_DATA_FLOAT_INTEL);
 
    counter->read(counter, accumulated, &value);
 
@@ -1337,6 +1349,27 @@ accumulate_uint32_cb(struct brw_oa_counter *counter,
       (uint32_t)(report1[counter->report_offset] -
                  report0[counter->report_offset]);
 }
+
+#if 0
+/* XXX: we should factor this out for now, but notably BDW has 40bit counters... */
+static void
+accumulate_uint40_cb(struct brw_oa_counter *counter,
+                     uint32_t *report0,
+                     uint32_t *report1,
+                     uint64_t *accumulator)
+{
+   uint32_t value0 = report0[counter->report_offset];
+   uint32_t value1 = report1[counter->report_offset];
+   uint64_t delta;
+
+   if (value0 > value1)
+      delta = (1ULL << 40) + value1 - value0;
+   else
+      delta = value1 - value0;
+
+   accumulator[counter->accumulator_index] += delta;
+}
+#endif
 
 static struct brw_oa_counter *
 add_raw_oa_counter(struct brw_query_builder *builder, int report_offset)
@@ -1453,6 +1486,71 @@ add_oa_counter_normalised_by_gpu_duration(struct brw_query_builder *builder,
 }
 
 static void
+read_hsw_samplers_busy_duration_cb(struct brw_oa_counter *counter,
+                                   uint64_t *accumulated,
+                                   void *value) /* float */
+{
+   uint64_t sampler0_busy = read_uint64_oa_counter(counter->reference0, accumulated);
+   uint64_t sampler1_busy = read_uint64_oa_counter(counter->reference1, accumulated);
+   uint64_t clk_delta = read_uint64_oa_counter(counter->reference2, accumulated);
+   float *ret = value;
+
+   if (!clk_delta) {
+      *ret = 0;
+      return;
+   }
+
+   *ret = ((double)(sampler0_busy + sampler1_busy) * 100.0) / ((double)clk_delta * 2.0);
+}
+
+static struct brw_oa_counter *
+add_hsw_samplers_busy_duration_oa_counter(struct brw_query_builder *builder,
+                                          struct brw_oa_counter *sampler0_busy_raw,
+                                          struct brw_oa_counter *sampler1_busy_raw)
+{
+   struct brw_oa_counter *counter =
+      &builder->query->oa_counters[builder->query->n_oa_counters++];
+
+   counter->reference0 = sampler0_busy_raw;
+   counter->reference1 = sampler1_busy_raw;
+   counter->reference2 = builder->gpu_core_clock;
+   counter->read = read_hsw_samplers_busy_duration_cb;
+   counter->data_type = GL_PERFQUERY_COUNTER_DATA_FLOAT_INTEL;
+
+   return counter;
+}
+
+static void
+read_hsw_slice_extrapolated_cb(struct brw_oa_counter *counter,
+                               uint64_t *accumulated,
+                               void *value) /* float */
+{
+   uint64_t counter0 = read_uint64_oa_counter(counter->reference0, accumulated);
+   uint64_t counter1 = read_uint64_oa_counter(counter->reference1, accumulated);
+   int eu_count = counter->config;
+   uint64_t *ret = value;
+
+   *ret = (counter0 + counter1) * eu_count;
+}
+
+static struct brw_oa_counter *
+add_hsw_slice_extrapolated_oa_counter(struct brw_query_builder *builder,
+                                      struct brw_oa_counter *counter0,
+                                      struct brw_oa_counter *counter1)
+{
+   struct brw_oa_counter *counter =
+      &builder->query->oa_counters[builder->query->n_oa_counters++];
+
+   counter->reference0 = counter0;
+   counter->reference1 = counter1;
+   counter->config = builder->brw->perfquery.eu_count;
+   counter->read = read_hsw_slice_extrapolated_cb;
+   counter->data_type = GL_PERFQUERY_COUNTER_DATA_UINT64_INTEL;
+
+   return counter;
+}
+
+static void
 read_oa_counter_normalized_by_eu_duration_cb(struct brw_oa_counter *counter,
                                              uint64_t *accumulated,
                                              void *value) /* float */
@@ -1521,6 +1619,63 @@ add_average_thread_cycles_oa_counter(struct brw_query_builder *builder,
 }
 
 static void
+read_scaled_uint64_counter_cb(struct brw_oa_counter *counter,
+                              uint64_t *accumulated,
+                              void *value) /* uint64 */
+{
+   uint64_t delta = read_uint64_oa_counter(counter->reference0, accumulated);
+   uint64_t scale = counter->config;
+   uint64_t *ret = value;
+
+   *ret = delta * scale;
+}
+
+static struct brw_oa_counter *
+add_scaled_uint64_oa_counter(struct brw_query_builder *builder,
+                             struct brw_oa_counter *input,
+                             int scale)
+{
+   struct brw_oa_counter *counter =
+      &builder->query->oa_counters[builder->query->n_oa_counters++];
+
+   counter->reference0 = input;
+   counter->config = scale;
+   counter->read = read_scaled_uint64_counter_cb;
+   counter->data_type = GL_PERFQUERY_COUNTER_DATA_UINT64_INTEL;
+
+   return counter;
+}
+
+static void
+read_max_of_float_counters_cb(struct brw_oa_counter *counter,
+                              uint64_t *accumulated,
+                              void *value) /* float */
+{
+   float counter0 = read_float_oa_counter(counter->reference0, accumulated);
+   float counter1 = read_float_oa_counter(counter->reference1, accumulated);
+   float *ret = value;
+
+   *ret = counter0 >= counter1 ? counter0 : counter1;
+}
+
+
+static struct brw_oa_counter *
+add_max_of_float_oa_counters(struct brw_query_builder *builder,
+                             struct brw_oa_counter *counter0,
+                             struct brw_oa_counter *counter1)
+{
+   struct brw_oa_counter *counter =
+      &builder->query->oa_counters[builder->query->n_oa_counters++];
+
+   counter->reference0 = counter0;
+   counter->reference1 = counter1;
+   counter->read = read_max_of_float_counters_cb;
+   counter->data_type = GL_PERFQUERY_COUNTER_DATA_FLOAT_INTEL;
+
+   return counter;
+}
+
+static void
 report_uint64_oa_counter_as_raw_uint64(struct brw_query_builder *builder,
                                        const char *name,
                                        const char *desc,
@@ -1578,6 +1733,26 @@ report_float_oa_counter_as_percentage_duration(struct brw_query_builder *builder
    counter->raw_max = 100;
    counter->offset = pot_align(builder->offset, 4);
    counter->size = sizeof(float);
+
+   builder->offset = counter->offset + counter->size;
+}
+
+static void
+report_uint64_oa_counter_as_throughput(struct brw_query_builder *builder,
+                                       const char *name,
+                                       const char *desc,
+                                       struct brw_oa_counter *oa_counter)
+{
+   struct brw_perf_query_counter *counter =
+      &builder->query->counters[builder->query->n_counters++];
+
+   counter->oa_counter = oa_counter;
+   counter->name = name;
+   counter->desc = desc;
+   counter->type = GL_PERFQUERY_COUNTER_THROUGHPUT_INTEL;
+   counter->data_type = GL_PERFQUERY_COUNTER_DATA_UINT64_INTEL;
+   counter->offset = pot_align(builder->offset, 8);
+   counter->size = sizeof(uint64_t);
 
    builder->offset = counter->offset + counter->size;
 }
@@ -1792,6 +1967,249 @@ hsw_add_basic_oa_counter_query(struct brw_context *brw)
    query->data_size = last->offset + last->size;
 }
 
+static void
+hsw_add_3d_oa_counter_query(struct brw_context *brw)
+{
+   struct brw_query_builder builder;
+   struct brw_perf_query *query =
+      &brw->perfquery.queries[brw->perfquery.n_queries++];
+   int a_offset;
+   int b_offset;
+   int c_offset;
+   struct brw_oa_counter *elapsed;
+   struct brw_oa_counter *raw;
+   struct brw_oa_counter *c;
+   struct brw_oa_counter *sampler0_busy_raw;
+   struct brw_oa_counter *sampler1_busy_raw;
+   struct brw_oa_counter *sampler0_bottleneck;
+   struct brw_oa_counter *sampler1_bottleneck;
+   struct brw_oa_counter *sampler0_texels;
+   struct brw_oa_counter *sampler1_texels;
+   struct brw_oa_counter *sampler0_l1_misses;
+   struct brw_oa_counter *sampler1_l1_misses;
+   struct brw_oa_counter *sampler_l1_misses;
+   struct brw_perf_query_counter *last;
+
+   query->kind = OA_COUNTERS;
+   query->name = "Gen7 3D Observability Architecture Counters";
+   query->counters = rzalloc_array(brw, struct brw_perf_query_counter,
+                                   MAX_PERF_QUERY_COUNTERS);
+   query->n_counters = 0;
+   query->oa_counters = rzalloc_array(brw, struct brw_oa_counter,
+                                      MAX_OA_QUERY_COUNTERS);
+   query->n_oa_counters = 0;
+   query->perf_profile_id = I915_PERF_OA_PROFILE_3D;
+   query->perf_oa_format_id = I915_PERF_OA_FORMAT_A45_B8_C8_HSW;
+
+   builder.brw = brw;
+   builder.query = query;
+   builder.offset = 0;
+   builder.next_accumulator_index = 0;
+
+   /* A counters offset = 12  bytes / 0x0c (45 A counters)
+    * B counters offset = 192 bytes / 0xc0 (8  B counters)
+    * C counters offset = 224 bytes / 0xe0 (8  C counters)
+    *
+    * Note: we index into the snapshots/reports as arrays of uint32 values
+    * relative to the A/B/C offset since different report layouts can vary how
+    * many A/B/C counters but with relative addressing it should be possible to
+    * re-use code for describing the counters available with different report
+    * layouts.
+    */
+
+   builder.a_offset = a_offset = 3;
+   builder.b_offset = b_offset = a_offset + 45;
+   builder.c_offset = c_offset = b_offset + 8;
+
+   /* Can be referenced by other counters... */
+   builder.gpu_core_clock = add_raw_oa_counter(&builder, c_offset + 2);
+
+   elapsed = add_hsw_elapsed_oa_counter(&builder);
+   report_uint64_oa_counter_as_duration(&builder,
+                                        "GPU Time Elapsed",
+                                        "Time elapsed on the GPU during the measurement.",
+                                        elapsed);
+
+   c = add_avg_frequency_oa_counter(&builder, elapsed);
+   report_uint64_oa_counter_as_uint64_event(&builder,
+                                            "AVG GPU Core Frequency",
+                                            "Average GPU Core Frequency in the measurement.",
+                                            c);
+
+   add_aggregate_counters(&builder);
+
+   raw = add_raw_oa_counter(&builder, a_offset + 35);
+   report_uint64_oa_counter_as_uint64_event(&builder,
+                                            "Early Depth Test Fails",
+                                            "The total number of pixels dropped on early depth test.",
+                                            raw);
+   /* XXX: caveat: it's 2x real No. when PS has 2 output colors */
+   raw = add_raw_oa_counter(&builder, a_offset + 36);
+   report_uint64_oa_counter_as_uint64_event(&builder,
+                                            "Samples Killed in PS",
+                                            "The total number of samples or pixels dropped in pixel shaders.",
+                                            raw);
+   raw = add_raw_oa_counter(&builder, a_offset + 37);
+   report_uint64_oa_counter_as_uint64_event(&builder,
+                                            "Alpha Test Fails",
+                                            "The total number of pixels dropped on post-PS alpha test.",
+                                            raw);
+   raw = add_raw_oa_counter(&builder, a_offset + 38);
+   report_uint64_oa_counter_as_uint64_event(&builder,
+                                            "Late Stencil Test Fails",
+                                            "The total number of pixels dropped on post-PS stencil test.",
+                                            raw);
+   raw = add_raw_oa_counter(&builder, a_offset + 39);
+   report_uint64_oa_counter_as_uint64_event(&builder,
+                                            "Late Depth Test Fails",
+                                            "The total number of pixels dropped on post-PS depth test.",
+                                            raw);
+   raw = add_raw_oa_counter(&builder, a_offset + 40);
+   report_uint64_oa_counter_as_uint64_event(&builder,
+                                            "Samples Written",
+                                            "The total number of samples or pixels written to all render targets.",
+                                            raw);
+
+   raw = add_raw_oa_counter(&builder, c_offset + 5);
+   /* I.e. assuming even work distribution across threads... */
+   c = add_scaled_uint64_oa_counter(&builder, raw, brw->perfquery.eu_count * 4);
+   report_uint64_oa_counter_as_uint64_event(&builder,
+                                            "Samples Blended",
+                                            "The total number of blended samples or pixels written to all render targets.",
+                                            c);
+
+#warning "check GT has slice 0 + 1"
+   /* XXX: XML implies explicit sub-slice availability check, but surely we can assume we have a slice 0? */
+   sampler0_busy_raw = add_raw_oa_counter(&builder, b_offset + 0);
+   c = add_oa_counter_normalised_by_gpu_duration(&builder, sampler0_busy_raw);
+   report_float_oa_counter_as_percentage_duration(&builder,
+                                                   "Sampler 0 Busy",
+                                                   "The percentage of time in which sampler 0 was busy.",
+                                                   c);
+   /* XXX: XML implies explicit sub-slice availability check: might just have one sampler? */
+   sampler1_busy_raw = add_raw_oa_counter(&builder, b_offset + 1);
+   c = add_oa_counter_normalised_by_gpu_duration(&builder, sampler1_busy_raw);
+   report_float_oa_counter_as_percentage_duration(&builder,
+                                                   "Sampler 1 Busy",
+                                                   "The percentage of time in which sampler 1 was busy.",
+                                                   c);
+
+   c = add_hsw_samplers_busy_duration_oa_counter(&builder,
+                                                 sampler0_busy_raw,
+                                                 sampler1_busy_raw);
+   report_float_oa_counter_as_percentage_duration(&builder,
+                                                   "Samplers Busy",
+                                                   "The percentage of time in which samplers were busy.",
+                                                   c);
+
+   raw = add_raw_oa_counter(&builder, b_offset + 2);
+   sampler0_bottleneck = add_oa_counter_normalised_by_gpu_duration(&builder, raw);
+   report_float_oa_counter_as_percentage_duration(&builder,
+                                                   "Sampler 0 Bottleneck",
+                                                   "The percentage of time in which sampler 0 was a bottleneck.",
+                                                   sampler0_bottleneck);
+   raw = add_raw_oa_counter(&builder, b_offset + 3);
+   sampler1_bottleneck = add_oa_counter_normalised_by_gpu_duration(&builder, raw);
+   report_float_oa_counter_as_percentage_duration(&builder,
+                                                   "Sampler 1 Bottleneck",
+                                                   "The percentage of time in which sampler 1 was a bottleneck.",
+                                                   sampler1_bottleneck);
+
+   c = add_max_of_float_oa_counters(&builder, sampler0_bottleneck, sampler1_bottleneck);
+   report_float_oa_counter_as_percentage_duration(&builder,
+                                                   "Sampler Bottleneck",
+                                                   "The percentage of time in which samplers were bottlenecks.",
+                                                   c);
+   raw = add_raw_oa_counter(&builder, b_offset + 4);
+   sampler0_texels = add_scaled_uint64_oa_counter(&builder, raw, 4);
+   report_uint64_oa_counter_as_uint64_event(&builder,
+                                            "Sampler 0 Texels LOD0", /* XXX LODO? */
+                                            "The total number of texels lookups in LOD0 in sampler 0 unit.",
+                                            sampler0_texels);
+   raw = add_raw_oa_counter(&builder, b_offset + 5);
+   sampler1_texels = add_scaled_uint64_oa_counter(&builder, raw, 4);
+   report_uint64_oa_counter_as_uint64_event(&builder,
+                                            "Sampler 1 Texels LOD0", /* XXX LODO? */
+                                            "The total number of texels lookups in LOD0 in sampler 1 unit.",
+                                            sampler1_texels);
+
+   /* TODO find a test case to try and sanity check the numbers we're getting */
+   c = add_hsw_slice_extrapolated_oa_counter(&builder, sampler0_texels, sampler1_texels);
+   report_uint64_oa_counter_as_uint64_event(&builder,
+                                            "Sampler Texels LOD0",
+                                            "The total number of texels lookups in LOD0 in all sampler units.",
+                                            c);
+
+   raw = add_raw_oa_counter(&builder, b_offset + 6);
+   sampler0_l1_misses = add_scaled_uint64_oa_counter(&builder, raw, 2);
+   report_uint64_oa_counter_as_uint64_event(&builder,
+                                            "Sampler 0 Cache Misses",
+                                            "The total number of misses in L1 sampler caches.",
+                                            sampler0_l1_misses);
+   raw = add_raw_oa_counter(&builder, b_offset + 7);
+   sampler1_l1_misses = add_scaled_uint64_oa_counter(&builder, raw, 2);
+   report_uint64_oa_counter_as_uint64_event(&builder,
+                                            "Sampler 1 Cache Misses",
+                                            "The total number of misses in L1 sampler caches.",
+                                            sampler1_l1_misses);
+   sampler_l1_misses = add_hsw_slice_extrapolated_oa_counter(&builder, sampler0_l1_misses, sampler1_l1_misses);
+   report_uint64_oa_counter_as_uint64_event(&builder,
+                                            "Sampler Cache Misses",
+                                            "The total number of misses in L1 sampler caches.",
+                                            sampler_l1_misses);
+
+   c = add_scaled_uint64_oa_counter(&builder, sampler_l1_misses, 64);
+   report_uint64_oa_counter_as_throughput(&builder,
+                                          "L3 Sampler Throughput",
+                                          "The total number of GPU memory bytes transferred between samplers and L3 caches.",
+                                          c);
+
+   raw = add_raw_oa_counter(&builder, c_offset + 1);
+   c = add_scaled_uint64_oa_counter(&builder, raw, 64);
+   report_uint64_oa_counter_as_throughput(&builder,
+                                          "GTI Fixed Pipe Throughput",
+                                          "The total number of GPU memory bytes transferred between Fixed Pipeline (Command Dispatch, Input Assembly and Stream Output) and GTI.",
+                                          c);
+
+   raw = add_raw_oa_counter(&builder, c_offset + 0);
+   c = add_scaled_uint64_oa_counter(&builder, raw, 64);
+   report_uint64_oa_counter_as_throughput(&builder,
+                                          "GTI Depth Throughput",
+                                          "The total number of GPU memory bytes transferred between depth caches and GTI.",
+                                          c);
+   raw = add_raw_oa_counter(&builder, c_offset + 3);
+   c = add_scaled_uint64_oa_counter(&builder, raw, 64);
+   report_uint64_oa_counter_as_throughput(&builder,
+                                          "GTI RCC Throughput",
+                                          "The total number of GPU memory bytes transferred between render color caches and GTI.",
+                                          c);
+   raw = add_raw_oa_counter(&builder, c_offset + 4);
+   c = add_scaled_uint64_oa_counter(&builder, raw, 64);
+   report_uint64_oa_counter_as_throughput(&builder,
+                                          "GTI L3 Throughput",
+                                          "The total number of GPU memory bytes transferred between L3 caches and GTI.",
+                                          c);
+   raw = add_raw_oa_counter(&builder, c_offset + 6);
+   c = add_scaled_uint64_oa_counter(&builder, raw, 128);
+   report_uint64_oa_counter_as_throughput(&builder,
+                                          "GTI Read Throughput",
+                                          "The total number of GPU memory bytes read from GTI.",
+                                          c);
+   raw = add_raw_oa_counter(&builder, c_offset + 7);
+   c = add_scaled_uint64_oa_counter(&builder, raw, 64);
+   report_uint64_oa_counter_as_throughput(&builder,
+                                          "GTI Write Throughput",
+                                          "The total number of GPU memory bytes written to GTI.",
+                                          c);
+
+   assert(query->n_counters < MAX_PERF_QUERY_COUNTERS);
+   assert(query->n_oa_counters < MAX_OA_QUERY_COUNTERS);
+
+   last = &query->counters[query->n_counters - 1];
+   query->data_size = last->offset + last->size;
+}
+
+
 #define NAMED_STAT(REG, NAME, DESC)                         \
    {                                                        \
       .name = NAME,                                         \
@@ -1908,6 +2326,7 @@ brw_init_performance_queries(struct brw_context *brw)
 
       brw->perfquery.read_oa_report_timestamp = hsw_read_report_timestamp;
       hsw_add_basic_oa_counter_query(brw);
+      hsw_add_3d_oa_counter_query(brw);
    }
 
    ctx->PerfQuery.NumQueries = brw->perfquery.n_queries;
