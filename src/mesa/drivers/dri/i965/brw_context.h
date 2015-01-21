@@ -946,6 +946,7 @@ struct brw_stage_state
 };
 
 enum brw_query_kind {
+   OA_COUNTERS,
    PIPELINE_STATS
 };
 
@@ -956,10 +957,18 @@ struct brw_perf_query
    struct brw_perf_query_counter *counters;
    int n_counters;
    size_t data_size;
+
+   /* OA specific */
+   int perf_profile_id;
+   uint64_t perf_oa_format_id;
+   struct brw_oa_counter *oa_counters;
+   int n_oa_counters;
 };
 
 #define MAX_PERF_QUERIES 3
 #define MAX_PERF_QUERY_COUNTERS 150
+#define MAX_OA_QUERY_COUNTERS 100
+#define MAX_RAW_OA_COUNTERS 62
 
 /**
  * brw_context is derived from gl_context.
@@ -1368,10 +1377,64 @@ struct brw_context
       struct brw_perf_query queries[MAX_PERF_QUERIES];
       int n_queries;
 
+      /* A common OA counter that we want to read directly in several places */
+      uint64_t (*read_oa_report_timestamp)(uint32_t *report);
+
+      /* Needed to normalize counters aggregated across all EUs */
+      int eu_count;
+
       /** A map from pipeline statistics counter IDs to MMIO addresses. */
       const int *statistics_registers;
 
+      /* The i915_oa perf event we open to setup + enable the OA counters */
+      int perf_oa_event_fd;
+
+      /* An i915_oa perf event fd gives exclusive access to the OA unit that
+       * will report counter snapshots for a specific counter set/profile in a
+       * specific layout/format so we can only start OA queries that are
+       * compatible with the currently open fd... */
+      int perf_profile_id;
+      uint64_t perf_oa_format_id;
+
+      /* The mmaped circular buffer for collecting samples from perf */
+      uint8_t *perf_oa_mmap_base;
+      size_t perf_oa_buffer_size;
+      struct perf_event_mmap_page *perf_oa_mmap_page;
+
+      /* The system's page size */
+      unsigned int page_size;
+
+      /* TODO: generalize and split these into an array indexed by the
+       * query type... */
+      int n_active_oa_queries;
       int n_active_pipeline_stats_queries;
+
+      /* The number of queries depending on running OA counters which
+       * extends beyond brw_end_perf_query() since we need to wait until
+       * the last MI_RPC command has been written. */
+      int n_oa_users;
+
+      /* We also get the gpu to write an ID for snapshots corresponding
+       * to the beginning and end of a query, but for simplicity these
+       * IDs use a separate namespace. */
+      int next_query_start_report_id;
+
+      /**
+       * An array of queries whose results haven't yet been assembled based on
+       * the data in buffer objects.
+       *
+       * These may be active, or have already ended.  However, the results
+       * have not been requested.
+       */
+      struct brw_perf_query_object **unresolved;
+      int unresolved_elements;
+      int unresolved_array_size;
+
+      /* The total number of query objects so we can relinquish
+       * our exclusive access to perf if the application deletes
+       * all of its objects. (NB: We only disable perf while
+       * there are no active queries) */
+      int n_query_instances;
    } perfquery;
 
    int num_atoms;
