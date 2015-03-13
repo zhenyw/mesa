@@ -191,6 +191,9 @@ brw_new_batch(struct brw_context *brw)
     */
    if (INTEL_DEBUG & DEBUG_SHADER_TIME)
       brw_collect_and_report_shader_time(brw);
+
+   if (INTEL_DEBUG & DEBUG_PERFQUERY)
+      brw_dump_perf_queries(brw);
 }
 
 /**

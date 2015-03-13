@@ -945,6 +945,22 @@ struct brw_stage_state
    uint32_t sampler_offset;
 };
 
+enum brw_query_kind {
+   PIPELINE_STATS
+};
+
+struct brw_perf_query
+{
+   enum brw_query_kind kind;
+   const char *name;
+   struct brw_perf_query_counter *counters;
+   int n_counters;
+   size_t data_size;
+};
+
+#define MAX_PERF_QUERIES 3
+#define MAX_PERF_QUERY_COUNTERS 150
+
 /**
  * brw_context is derived from gl_context.
  */
@@ -1348,6 +1364,16 @@ struct brw_context
       bool begin_emitted;
    } query;
 
+   struct {
+      struct brw_perf_query queries[MAX_PERF_QUERIES];
+      int n_queries;
+
+      /** A map from pipeline statistics counter IDs to MMIO addresses. */
+      const int *statistics_registers;
+
+      int n_active_pipeline_stats_queries;
+   } perfquery;
+
    int num_atoms;
    const struct brw_tracked_state atoms[57];
 
@@ -1623,6 +1649,10 @@ bool brw_is_hiz_depth_format(struct brw_context *ctx, mesa_format format);
 bool brw_render_target_supported(struct brw_context *brw,
                                  struct gl_renderbuffer *rb);
 uint32_t brw_depth_format(struct brw_context *brw, mesa_format format);
+
+/* brw_performance_query.c */
+void brw_init_performance_queries(struct brw_context *brw);
+void brw_dump_perf_queries(struct brw_context *brw);
 
 /* intel_buffer_objects.c */
 int brw_bo_map(struct brw_context *brw, drm_intel_bo *bo, int write_enable,

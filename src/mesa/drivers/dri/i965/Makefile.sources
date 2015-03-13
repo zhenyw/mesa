@@ -75,6 +75,7 @@ i965_FILES = \
 	brw_multisample_state.h \
 	brw_object_purgeable.c \
 	brw_packed_float.c \
+	brw_performance_query.c \
 	brw_primitive_restart.c \
 	brw_program.c \
 	brw_program.h \

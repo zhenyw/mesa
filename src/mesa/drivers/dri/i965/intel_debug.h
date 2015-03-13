@@ -38,7 +38,7 @@ extern uint64_t INTEL_DEBUG;
 #define DEBUG_BLIT                (1 <<  2)
 #define DEBUG_MIPTREE             (1 <<  3)
 #define DEBUG_PERF                (1 <<  4)
-#define DEBUG_PERFMON             (1 <<  5)
+#define DEBUG_PERFQUERY           (1 <<  5)
 #define DEBUG_BATCH               (1 <<  6)
 #define DEBUG_PIXEL               (1 <<  7)
 #define DEBUG_BUFMGR              (1 <<  8)
