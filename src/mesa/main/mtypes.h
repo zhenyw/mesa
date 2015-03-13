@@ -1951,6 +1951,33 @@ struct gl_transform_feedback_state
 
 
 /**
+ * A query object instance as described in INTEL_performance_query.
+ *
+ * NB: We want to keep this and the corresponding backend structure
+ * relatively lean considering that applications may expect to
+ * allocate enough objects to be able to query around all draw calls
+ * in a frame.
+ */
+struct gl_perf_query_object
+{
+   GLuint Id;        /**< hash table ID/name */
+   GLuint Used:1;    /**< has been used for 1 or more queries */
+   GLuint Active:1;  /**< inside Begin/EndPerfQuery */
+   GLuint Ready:1;   /**< result is ready? */
+};
+
+
+/**
+ * Context state for INTEL_performance_query.
+ */
+struct gl_perf_query_state
+{
+   struct _mesa_HashTable *Objects; /**< The table of all performance query objects */
+   GLuint NumQueries;
+};
+
+
+/**
  * Names of the various vertex/fragment program register files, etc.
  *
  * NOTE: first four tokens must fit into 2 bits (see t_vb_arbprogram.c)
@@ -3773,6 +3800,7 @@ struct gl_extensions
    GLboolean ATI_texture_env_combine3;
    GLboolean ATI_fragment_shader;
    GLboolean ATI_separate_stencil;
+   GLboolean INTEL_performance_query;
    GLboolean MESA_pack_invert;
    GLboolean MESA_ycbcr_texture;
    GLboolean NV_conditional_render;
@@ -4274,6 +4302,8 @@ struct gl_context
    struct gl_query_state Query;  /**< occlusion, timer queries */
 
    struct gl_transform_feedback_state TransformFeedback;
+
+   struct gl_perf_query_state PerfQuery;
 
    struct gl_buffer_object *DrawIndirectBuffer; /** < GL_ARB_draw_indirect */
 

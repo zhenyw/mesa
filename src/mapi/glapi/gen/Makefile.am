@@ -178,6 +178,7 @@ API_XML = \
 	EXT_texture_array.xml \
 	EXT_texture_integer.xml \
 	EXT_transform_feedback.xml \
+	INTEL_performance_query.xml \
 	KHR_debug.xml \
 	KHR_context_flush_control.xml \
 	NV_conditional_render.xml \

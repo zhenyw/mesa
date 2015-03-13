@@ -905,6 +905,18 @@ const struct function gl_core_functions_possible[] = {
    //{ "glDebugMessageCallbackARB", 11, -1 },
    //{ "glGetDebugMessageLogARB", 11, -1 },
 
+   /* GL_INTEL_performance_query */
+   { "glGetFirstPerfQueryIdINTEL", 30, -1 },
+   { "glGetNextPerfQueryIdINTEL", 30, -1 },
+   { "glGetPerfQueryIdByNameINTEL", 30, -1 },
+   { "glGetPerfQueryInfoINTEL", 30, -1 },
+   { "glGetPerfCounterInfoINTEL", 30, -1 },
+   { "glCreatePerfQueryINTEL", 30, -1 },
+   { "glDeletePerfQueryINTEL", 30, -1 },
+   { "glBeginPerfQueryINTEL", 30, -1 },
+   { "glEndPerfQueryINTEL", 30, -1 },
+   { "glGetPerfQueryDataINTEL", 30, -1 },
+
    /* GL_NV_vdpau_interop */
    { "glVDPAUInitNV", 11, -1 },
    { "glVDPAUFiniNV", 11, -1 },
@@ -1369,6 +1381,18 @@ const struct function gles2_functions_possible[] = {
    { "glProgramUniformMatrix4x3fvEXT", 20, -1 },
    { "glValidateProgramPipelineEXT", 20, -1 },
    { "glGetProgramPipelineInfoLogEXT", 20, -1 },
+
+   /* GL_INTEL_performance_query */
+   { "glGetFirstPerfQueryIdINTEL", 20, -1 },
+   { "glGetNextPerfQueryIdINTEL", 20, -1 },
+   { "glGetPerfQueryIdByNameINTEL", 20, -1 },
+   { "glGetPerfQueryInfoINTEL", 20, -1 },
+   { "glGetPerfCounterInfoINTEL", 20, -1 },
+   { "glCreatePerfQueryINTEL", 20, -1 },
+   { "glDeletePerfQueryINTEL", 20, -1 },
+   { "glBeginPerfQueryINTEL", 20, -1 },
+   { "glEndPerfQueryINTEL", 20, -1 },
+   { "glGetPerfQueryDataINTEL", 20, -1 },
 
    { NULL, 0, -1 }
 };

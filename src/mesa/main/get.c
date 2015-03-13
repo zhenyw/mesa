@@ -389,6 +389,7 @@ EXTRA_EXT(ARB_viewport_array);
 EXTRA_EXT(ARB_compute_shader);
 EXTRA_EXT(ARB_gpu_shader5);
 EXTRA_EXT2(ARB_transform_feedback3, ARB_gpu_shader5);
+EXTRA_EXT(INTEL_performance_query);
 EXTRA_EXT(ARB_explicit_uniform_location);
 EXTRA_EXT(ARB_clip_control);
 EXTRA_EXT(EXT_polygon_offset_clamp);

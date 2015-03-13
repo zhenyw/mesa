@@ -138,6 +138,8 @@ MAIN_FILES = \
 	main/pack.h \
 	main/pbo.c \
 	main/pbo.h \
+	main/performance_query.c \
+	main/performance_query.h \
 	main/pipelineobj.c \
 	main/pipelineobj.h \
 	main/pixel.c \
