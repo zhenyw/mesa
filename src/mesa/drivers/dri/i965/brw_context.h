@@ -959,8 +959,8 @@ struct brw_perf_query
    size_t data_size;
 
    /* OA specific */
-   int perf_profile_id;
-   uint64_t perf_oa_format_id;
+   int oa_metrics_set;
+   int oa_format;
    struct brw_oa_counter *oa_counters;
    int n_oa_counters;
 };
@@ -1393,8 +1393,8 @@ struct brw_context
        * will report counter snapshots for a specific counter set/profile in a
        * specific layout/format so we can only start OA queries that are
        * compatible with the currently open fd... */
-      int perf_profile_id;
-      uint64_t perf_oa_format_id;
+      int perf_oa_metrics_set;
+      int perf_oa_format;
 
       /* The mmaped circular buffer for collecting samples from perf */
       uint8_t *perf_oa_mmap_base;

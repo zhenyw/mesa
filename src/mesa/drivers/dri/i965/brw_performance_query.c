@@ -230,30 +230,6 @@ struct oa_perf_sample {
 #define PERF_EVENT_IOC_FLUSH                 _IO ('$', 8)
 #endif
 
-
-/* attr.config */
-
-#define I915_PERF_OA_CTX_ID_MASK	    0xffffffff
-#define I915_PERF_OA_SINGLE_CONTEXT_ENABLE  (1ULL << 32)
-
-#define I915_PERF_OA_FORMAT_SHIFT	    33
-#define I915_PERF_OA_FORMAT_MASK	    (0x7ULL << 33)
-#define I915_PERF_OA_FORMAT_A13_HSW	    (0ULL << 33)
-#define I915_PERF_OA_FORMAT_A29_HSW	    (1ULL << 33)
-#define I915_PERF_OA_FORMAT_A13_B8_C8_HSW   (2ULL << 33)
-#define I915_PERF_OA_FORMAT_B4_C8_HSW	    (4ULL << 33)
-#define I915_PERF_OA_FORMAT_A45_B8_C8_HSW   (5ULL << 33)
-#define I915_PERF_OA_FORMAT_B4_C8_A16_HSW   (6ULL << 33)
-#define I915_PERF_OA_FORMAT_C4_B8_HSW	    (7ULL << 33)
-
-#define I915_PERF_OA_TIMER_EXPONENT_SHIFT   36
-#define I915_PERF_OA_TIMER_EXPONENT_MASK    (0x3fULL << 36)
-
-#define I915_PERF_OA_PROFILE_SHIFT          42
-#define I915_PERF_OA_PROFILE_MASK           (0x3fULL << 42)
-#define I915_PERF_OA_PROFILE_3D             1
-
-
 /** Downcasting convenience macro. */
 static inline struct brw_perf_query_object *
 brw_perf_query(struct gl_perf_query_object *o)
@@ -844,31 +820,37 @@ perf_event_open (struct perf_event_attr *hw_event,
 
 static bool
 open_i915_oa_event(struct brw_context *brw,
-                   int counter_profile_id,
-                   uint64_t report_format,
+                   int metrics_set,
+                   int report_format,
                    int period_exponent,
                    int drm_fd,
-                   uint64_t ctx_id)
+                   uint32_t ctx_id)
 {
    struct perf_event_attr attr;
+   drm_i915_oa_attr_t oa_attr;
    int event_fd;
    void *mmap_base;
 
-   memset(&attr, 0, sizeof (struct perf_event_attr));
-   attr.size = sizeof (struct perf_event_attr);
+   memset(&attr, 0, sizeof(attr));
+   attr.size = sizeof(attr);
    attr.type = lookup_i915_oa_id();
-
-   attr.config |= (uint64_t)counter_profile_id << I915_PERF_OA_PROFILE_SHIFT;
-   attr.config |= report_format;
-   attr.config |= (uint64_t)period_exponent << I915_PERF_OA_TIMER_EXPONENT_SHIFT;
-
-   attr.config |= I915_PERF_OA_SINGLE_CONTEXT_ENABLE;
-   attr.config |= ctx_id & I915_PERF_OA_CTX_ID_MASK;
-   attr.config1 = drm_fd;
 
    attr.sample_type = PERF_SAMPLE_RAW;
    attr.disabled = 1;
    attr.sample_period = 1;
+
+   memset(&oa_attr, 0, sizeof(oa_attr));
+   oa_attr.size = sizeof(oa_attr);
+
+   oa_attr.format = report_format;
+   oa_attr.metrics_set = metrics_set;
+   oa_attr.timer_exponent = period_exponent;
+
+   oa_attr.single_context = true;
+   oa_attr.ctx_id = ctx_id;
+   oa_attr.drm_fd = drm_fd;
+
+   attr.config = (uint64_t)&oa_attr;
 
    event_fd = perf_event_open(&attr,
                               -1, /* pid */
@@ -895,8 +877,8 @@ open_i915_oa_event(struct brw_context *brw,
    brw->perfquery.perf_oa_mmap_base = mmap_base;
    brw->perfquery.perf_oa_mmap_page = mmap_base;
 
-   brw->perfquery.perf_profile_id = counter_profile_id;
-   brw->perfquery.perf_oa_format_id = report_format;
+   brw->perfquery.perf_oa_metrics_set = metrics_set;
+   brw->perfquery.perf_oa_format = report_format;
 
    return true;
 }
@@ -922,7 +904,7 @@ brw_begin_perf_query(struct gl_context *ctx,
       /* If the OA counters aren't already on, enable them. */
       if (brw->perfquery.perf_oa_event_fd == -1) {
          __DRIscreen *screen = brw->intelScreen->driScrnPriv;
-         uint64_t ctx_id = drm_intel_gem_context_get_context_id(brw->hw_ctx);
+         uint32_t ctx_id = drm_intel_gem_context_get_context_id(brw->hw_ctx);
          int period_exponent;
 
          /* The timestamp for HSW+ increments every 80ns
@@ -940,8 +922,8 @@ brw_begin_perf_query(struct gl_context *ctx,
          period_exponent = 18;
 
          if (!open_i915_oa_event(brw,
-                                 query->perf_profile_id,
-                                 query->perf_oa_format_id,
+                                 query->oa_metrics_set,
+                                 query->oa_format,
                                  period_exponent,
                                  screen->fd, /* drm fd */
                                  ctx_id))
@@ -954,8 +936,8 @@ brw_begin_perf_query(struct gl_context *ctx,
           * different profile or format unless we get an opportunity
           * to close the event fd and open a new one...
           */
-         if (brw->perfquery.perf_profile_id != query->perf_profile_id ||
-             brw->perfquery.perf_oa_format_id != query->perf_oa_format_id)
+         if (brw->perfquery.perf_oa_metrics_set != query->oa_metrics_set ||
+             brw->perfquery.perf_oa_format != query->oa_format)
          {
             return false;
          }
@@ -1931,8 +1913,8 @@ hsw_add_basic_oa_counter_query(struct brw_context *brw)
    query->oa_counters = rzalloc_array(brw, struct brw_oa_counter,
                                       MAX_OA_QUERY_COUNTERS);
    query->n_oa_counters = 0;
-   query->perf_profile_id = 0; /* default profile */
-   query->perf_oa_format_id = I915_PERF_OA_FORMAT_A45_B8_C8_HSW;
+   query->oa_metrics_set = 0; /* default profile */
+   query->oa_format = I915_OA_FORMAT_A45_B8_C8_HSW;
 
    builder.brw = brw;
    builder.query = query;
@@ -1998,8 +1980,8 @@ hsw_add_3d_oa_counter_query(struct brw_context *brw)
    query->oa_counters = rzalloc_array(brw, struct brw_oa_counter,
                                       MAX_OA_QUERY_COUNTERS);
    query->n_oa_counters = 0;
-   query->perf_profile_id = I915_PERF_OA_PROFILE_3D;
-   query->perf_oa_format_id = I915_PERF_OA_FORMAT_A45_B8_C8_HSW;
+   query->oa_metrics_set = I915_OA_METRICS_SET_3D;
+   query->oa_format = I915_OA_FORMAT_A45_B8_C8_HSW;
 
    builder.brw = brw;
    builder.query = query;
